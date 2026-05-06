@@ -91,7 +91,40 @@ bool send_all(int fd, const std::string& data) {
     return true;
 }
 
-std::string handle_command(KVStore& store, const std::string& line) {
+void client_session(int client_fd, KVStore& store) {
+    char buffer[1024];
+    const char* greeting = "Welcome to KV store. Commands: SET GET DEL EXPIRE SAVE QUIT\n";
+    send_all(client_fd, greeting);
+
+    std::string pending;
+    while (true) {
+        std::memset(buffer, 0, sizeof(buffer));
+        ssize_t bytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+        if (bytes <= 0) break;
+
+        pending.append(buffer, static_cast<std::size_t>(bytes));
+        std::size_t newline = std::string::npos;
+        while ((newline = pending.find('\n')) != std::string::npos) {
+            std::string line = pending.substr(0, newline);
+            pending.erase(0, newline + 1);
+            const auto response = Server::handle_command(store, line);
+            if (!send_all(client_fd, response)) {
+                close(client_fd);
+                return;
+            }
+            if (upper(trim(line)) == "QUIT") {
+                close(client_fd);
+                return;
+            }
+        }
+    }
+    close(client_fd);
+}
+}  // namespace
+
+Server::Server(KVStore& store, int port) : store_(store), port_(port) {}
+
+std::string Server::handle_command(KVStore& store, const std::string& line) {
     const auto cleaned = trim(line);
     const auto parts = split(cleaned);
     if (parts.empty()) return "ERR empty command\n";
@@ -142,39 +175,6 @@ std::string handle_command(KVStore& store, const std::string& line) {
     }
     return "ERR unknown command\n";
 }
-
-void client_session(int client_fd, KVStore& store) {
-    char buffer[1024];
-    const char* greeting = "Welcome to KV store. Commands: SET GET DEL EXPIRE SAVE QUIT\n";
-    send_all(client_fd, greeting);
-
-    std::string pending;
-    while (true) {
-        std::memset(buffer, 0, sizeof(buffer));
-        ssize_t bytes = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
-        if (bytes <= 0) break;
-
-        pending.append(buffer, static_cast<std::size_t>(bytes));
-        std::size_t newline = std::string::npos;
-        while ((newline = pending.find('\n')) != std::string::npos) {
-            std::string line = pending.substr(0, newline);
-            pending.erase(0, newline + 1);
-            const auto response = handle_command(store, line);
-            if (!send_all(client_fd, response)) {
-                close(client_fd);
-                return;
-            }
-            if (upper(trim(line)) == "QUIT") {
-                close(client_fd);
-                return;
-            }
-        }
-    }
-    close(client_fd);
-}
-}  // namespace
-
-Server::Server(KVStore& store, int port) : store_(store), port_(port) {}
 
 void Server::run() {
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);

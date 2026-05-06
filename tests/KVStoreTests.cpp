@@ -1,4 +1,5 @@
 #include "KVStore.hpp"
+#include "Server.hpp"
 
 #include <cassert>
 #include <chrono>
@@ -46,6 +47,31 @@ void test_wal_recovers_set_and_delete() {
     cleanup(paths);
 }
 
+void test_wal_recovers_after_restart_without_snapshot() {
+    const auto paths = make_paths("restart");
+    {
+        KVStore store(paths.snapshot, paths.wal);
+        store.set("session", "still here");
+    }
+
+    std::remove(paths.snapshot.c_str());
+    {
+        KVStore recovered(paths.snapshot, paths.wal);
+        assert(recovered.get("session").value() == "still here");
+    }
+    cleanup(paths);
+}
+
+void test_values_with_spaces_through_command_handler() {
+    const auto paths = make_paths("spaces");
+    {
+        KVStore store(paths.snapshot, paths.wal);
+        assert(Server::handle_command(store, "SET full_name Moatasim Butt") == "OK\n");
+        assert(Server::handle_command(store, "GET full_name") == "Moatasim Butt\n");
+    }
+    cleanup(paths);
+}
+
 void test_ttl_expires() {
     const auto paths = make_paths("ttl");
     {
@@ -55,6 +81,29 @@ void test_ttl_expires() {
         assert(store.ttl("short").has_value());
         std::this_thread::sleep_for(std::chrono::milliseconds(1200));
         assert(!store.get("short").has_value());
+    }
+    cleanup(paths);
+}
+
+void test_ttl_missing_and_non_expiring_keys() {
+    const auto paths = make_paths("ttl_values");
+    {
+        KVStore store(paths.snapshot, paths.wal);
+        assert(!store.ttl("missing").has_value());
+        store.set("permanent", "value");
+        assert(store.ttl("permanent").value() == -1);
+    }
+    cleanup(paths);
+}
+
+void test_invalid_commands_return_errors() {
+    const auto paths = make_paths("invalid_commands");
+    {
+        KVStore store(paths.snapshot, paths.wal);
+        assert(Server::handle_command(store, "") == "ERR empty command\n");
+        assert(Server::handle_command(store, "BOGUS") == "ERR unknown command\n");
+        assert(Server::handle_command(store, "GET too many args") == "ERR usage: GET key\n");
+        assert(Server::handle_command(store, "EXPIRE key nope") == "ERR seconds must be an integer\n");
     }
     cleanup(paths);
 }
@@ -79,7 +128,11 @@ void test_snapshot_compaction_recovers_live_data() {
 
 int main() {
     test_wal_recovers_set_and_delete();
+    test_wal_recovers_after_restart_without_snapshot();
+    test_values_with_spaces_through_command_handler();
     test_ttl_expires();
+    test_ttl_missing_and_non_expiring_keys();
+    test_invalid_commands_return_errors();
     test_snapshot_compaction_recovers_live_data();
     std::cout << "KVStore tests passed\n";
     return 0;

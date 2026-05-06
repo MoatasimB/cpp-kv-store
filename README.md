@@ -47,6 +47,32 @@ The number after `SET` is the expiration timestamp in Unix milliseconds, or `-1`
 
 Snapshots are compact full copies of live keys. `COMPACT` writes a new snapshot and truncates the WAL so recovery remains fast.
 
+## Command Protocol
+
+Each client sends one newline-terminated command at a time:
+
+```text
+PING
+SET <key> <value>
+GET <key>
+DEL <key>
+EXPIRE <key> <seconds>
+TTL <key>
+SAVE
+COMPACT
+STATS
+QUIT
+```
+
+Responses are also newline-terminated text. Missing keys return `(nil)` for `GET`; `TTL` returns `-2` for missing keys and `-1` for keys without expiration.
+
+`SET` stores the rest of the line as the value, so spaces are supported:
+
+```text
+SET full_name Moatasim Butt
+GET full_name
+```
+
 ## Build
 
 ```bash
@@ -54,9 +80,10 @@ mkdir build
 cd build
 cmake ..
 cmake --build .
+ctest --test-dir .
 ```
 
-This environment did not have `cmake` installed, so the project was also verified directly with `clang++`:
+If CMake is not installed, the project can also be built directly with `clang++`:
 
 ```bash
 clang++ -std=c++17 -Iinclude src/KVStore.cpp src/Wal.cpp src/Server.cpp src/main.cpp -pthread -o kv_store
@@ -96,7 +123,15 @@ You can also choose a port and snapshot path:
 ./kv_tests
 ```
 
-The tests cover WAL recovery, deletion recovery, TTL expiry, and snapshot compaction.
+The tests cover:
+
+- WAL recovery after restart
+- deletion recovery
+- values with spaces
+- TTL expiry
+- missing/non-expiring TTL behavior
+- invalid command handling
+- snapshot compaction
 
 ## Benchmark
 
@@ -113,6 +148,42 @@ kv_bench <clients> <ops_per_client> <host> <port>
 ```
 
 The benchmark reports throughput and p50/p95/p99 latency for SET+GET request pairs.
+
+Example local result on this machine:
+
+```text
+clients=4
+request_pairs=1000
+ops_per_second=57781
+p50_pair_us=126
+p95_pair_us=191
+p99_pair_us=349
+```
+
+Benchmark numbers vary by machine, compiler, port contention, and whether persistence files are on a fast local disk.
+
+## Recovery Example
+
+If a client writes:
+
+```text
+SET name Moatasim Butt
+SET city NYC
+DEL city
+```
+
+The WAL records those mutations. On restart, `KVStore` loads the latest snapshot, then replays the WAL in order. The recovered state contains `name = Moatasim Butt`, and `city` remains deleted.
+
+`COMPACT` writes the current live state into the snapshot file and clears the WAL. Future recovery starts from that compact snapshot plus any newer WAL records.
+
+## Limitations
+
+- Single-node only; no replication, sharding, or consensus yet
+- One thread per connected client
+- Text WAL is easy to inspect but does not include checksums
+- Values with newlines are not supported
+- No authentication or TLS
+- No eviction policy or memory limit
 
 ## Current Scope
 

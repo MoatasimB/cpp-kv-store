@@ -1,0 +1,24 @@
+# Build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+Makefile
+cmake_install.cmake
+
+# Local binaries
+kv_store
+kv_tests
+kv_bench
+
+# Runtime persistence files
+snapshot.db
+snapshot.db.wal
+*.db
+*.db.wal
+*.tmp
+
+# OS/editor files
+.DS_Store
+.vscode/
+.idea/
