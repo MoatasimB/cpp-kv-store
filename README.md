@@ -8,9 +8,10 @@ A small Redis-inspired key-value store written in C++17. It supports TCP clients
 - Thread-safe in-memory storage with `std::unordered_map` and `std::shared_mutex`
 - Commands: `PING`, `SET`, `GET`, `DEL`, `EXPIRE`, `TTL`, `SAVE`, `COMPACT`, `STATS`, `QUIT`
 - TTL expiration with lazy cleanup and a background cleanup thread
+- Optional LRU eviction with a configurable max-key limit
 - Readable text WAL for crash recovery
 - Snapshot compaction to keep recovery fast
-- Unit tests and concurrent benchmark client
+- Unit tests, integration test, GitHub Actions CI, Dockerfile, and concurrent benchmark client
 
 ## Build
 
@@ -38,6 +39,12 @@ Or choose a port and snapshot path:
 
 ```bash
 ./build/kv_store 6391 /tmp/kv_snapshot.db
+```
+
+You can also set a max-key limit for LRU eviction. `0` means unlimited:
+
+```bash
+./build/kv_store 6391 /tmp/kv_snapshot.db 10000
 ```
 
 Connect from another terminal:
@@ -77,7 +84,28 @@ On startup, the store loads the latest snapshot and replays the WAL. `COMPACT` w
 ./build/kv_tests
 ```
 
-The tests cover WAL recovery, deletion recovery, values with spaces, TTL behavior, invalid commands, and snapshot compaction.
+The tests cover WAL recovery, deletion recovery, values with spaces, TTL behavior, invalid commands, LRU eviction, and snapshot compaction.
+
+Run the socket-level integration test:
+
+```bash
+./scripts/integration_test.sh
+```
+
+The integration test builds the project, starts the TCP server, sends real commands through `nc`, verifies responses, and shuts the server down.
+
+## Docker
+
+```bash
+docker build -t cpp-kv-store .
+docker run --rm -p 6380:6380 cpp-kv-store
+```
+
+Then connect with:
+
+```bash
+nc 127.0.0.1 6380
+```
 
 ## Benchmark
 
@@ -110,4 +138,4 @@ p99_pair_us=349
 - One thread per connected client
 - Text WAL has no checksums
 - Values with newlines are not supported
-- No authentication, TLS, replication, or eviction policy
+- No authentication, TLS, replication, or distributed consensus

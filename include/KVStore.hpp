@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <list>
 #include <optional>
 #include <shared_mutex>
 #include <string>
@@ -16,7 +17,7 @@ struct ValueEntry {
 
 class KVStore {
 public:
-    explicit KVStore(const std::string& snapshot_path, std::string wal_path = "");
+    explicit KVStore(const std::string& snapshot_path, std::string wal_path = "", std::size_t max_keys = 0);
     ~KVStore();
 
     void set(const std::string& key, const std::string& value);
@@ -40,11 +41,17 @@ private:
     void append_wal_set(const std::string& key, const ValueEntry& entry);
     void append_wal_del(const std::string& key);
     bool is_expired(const ValueEntry& entry) const;
+    void touch_lru_locked(const std::string& key);
+    void remove_lru_locked(const std::string& key);
+    void evict_if_needed_locked(bool persist);
 
     std::unordered_map<std::string, ValueEntry> store_;
     mutable std::shared_mutex mutex_;
     std::string snapshot_path_;
     std::string wal_path_;
+    std::size_t max_keys_{0};
+    std::list<std::string> lru_order_;
+    std::unordered_map<std::string, std::list<std::string>::iterator> lru_index_;
     std::atomic<bool> running_{true};
     std::thread cleanup_thread_;
 };

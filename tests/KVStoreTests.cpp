@@ -108,6 +108,41 @@ void test_invalid_commands_return_errors() {
     cleanup(paths);
 }
 
+void test_lru_evicts_least_recently_used_key() {
+    const auto paths = make_paths("lru");
+    {
+        KVStore store(paths.snapshot, paths.wal, 2);
+        store.set("a", "1");
+        store.set("b", "2");
+        assert(store.get("a").value() == "1");
+        store.set("c", "3");
+
+        assert(store.get("a").value() == "1");
+        assert(!store.get("b").has_value());
+        assert(store.get("c").value() == "3");
+    }
+    cleanup(paths);
+}
+
+void test_lru_eviction_is_recovered_from_wal() {
+    const auto paths = make_paths("lru_recovery");
+    {
+        KVStore store(paths.snapshot, paths.wal, 2);
+        store.set("a", "1");
+        store.set("b", "2");
+        store.set("c", "3");
+    }
+
+    std::remove(paths.snapshot.c_str());
+    {
+        KVStore recovered(paths.snapshot, paths.wal, 2);
+        assert(!recovered.get("a").has_value());
+        assert(recovered.get("b").value() == "2");
+        assert(recovered.get("c").value() == "3");
+    }
+    cleanup(paths);
+}
+
 void test_snapshot_compaction_recovers_live_data() {
     const auto paths = make_paths("snapshot");
     {
@@ -133,6 +168,8 @@ int main() {
     test_ttl_expires();
     test_ttl_missing_and_non_expiring_keys();
     test_invalid_commands_return_errors();
+    test_lru_evicts_least_recently_used_key();
+    test_lru_eviction_is_recovered_from_wal();
     test_snapshot_compaction_recovers_live_data();
     std::cout << "KVStore tests passed\n";
     return 0;

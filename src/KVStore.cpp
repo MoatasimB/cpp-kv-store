@@ -6,9 +6,10 @@
 #include <mutex>
 #include <utility>
 
-KVStore::KVStore(const std::string& snapshot_path, std::string wal_path)
+KVStore::KVStore(const std::string& snapshot_path, std::string wal_path, std::size_t max_keys)
     : snapshot_path_(snapshot_path),
-      wal_path_(wal_path.empty() ? snapshot_path + ".wal" : std::move(wal_path)) {
+      wal_path_(wal_path.empty() ? snapshot_path + ".wal" : std::move(wal_path)),
+      max_keys_(max_keys) {
     load_snapshot();
     replay_wal();
     cleanup_thread_ = std::thread(&KVStore::cleanup_loop, this);
@@ -40,29 +41,24 @@ void KVStore::set_internal(const std::string& key, const std::string& value,
         append_wal_set(key, entry);
     }
     store_[key] = entry;
+    touch_lru_locked(key);
+    evict_if_needed_locked(persist);
 }
 
 std::optional<std::string> KVStore::get(const std::string& key) {
-    {
-        std::shared_lock lock(mutex_);
-        auto it = store_.find(key);
-        if (it == store_.end()) {
-            return std::nullopt;
-        }
-        if (is_expired(it->second)) {
-            // fall through to erase with unique lock
-        } else {
-            return it->second.value;
-        }
-    }
-
     std::unique_lock lock(mutex_);
     auto it = store_.find(key);
-    if (it != store_.end() && is_expired(it->second)) {
-        append_wal_del(key);
-        store_.erase(it);
+    if (it == store_.end()) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    if (is_expired(it->second)) {
+        append_wal_del(key);
+        remove_lru_locked(key);
+        store_.erase(it);
+        return std::nullopt;
+    }
+    touch_lru_locked(key);
+    return it->second.value;
 }
 
 bool KVStore::del(const std::string& key) {
@@ -74,6 +70,9 @@ bool KVStore::del_internal(const std::string& key, bool persist) {
     const bool removed = store_.erase(key) > 0;
     if (removed && persist) {
         append_wal_del(key);
+    }
+    if (removed) {
+        remove_lru_locked(key);
     }
     return removed;
 }
@@ -89,12 +88,14 @@ bool KVStore::expire(const std::string& key, int seconds) {
     }
     if (is_expired(it->second)) {
         append_wal_del(key);
+        remove_lru_locked(key);
         store_.erase(it);
         return false;
     }
     it->second.has_expiry = true;
     it->second.expiry_time = std::chrono::system_clock::now() + std::chrono::seconds(seconds);
     append_wal_set(key, it->second);
+    touch_lru_locked(key);
     return true;
 }
 
@@ -126,6 +127,7 @@ void KVStore::cleanup_expired_locked() {
     for (auto it = store_.begin(); it != store_.end();) {
         if (is_expired(it->second)) {
             append_wal_del(it->first);
+            remove_lru_locked(it->first);
             it = store_.erase(it);
         } else {
             ++it;
@@ -213,4 +215,30 @@ void KVStore::append_wal_del(const std::string& key) {
 
 bool KVStore::is_expired(const ValueEntry& entry) const {
     return entry.has_expiry && std::chrono::system_clock::now() >= entry.expiry_time;
+}
+
+void KVStore::touch_lru_locked(const std::string& key) {
+    remove_lru_locked(key);
+    lru_order_.push_front(key);
+    lru_index_[key] = lru_order_.begin();
+}
+
+void KVStore::remove_lru_locked(const std::string& key) {
+    auto it = lru_index_.find(key);
+    if (it == lru_index_.end()) {
+        return;
+    }
+    lru_order_.erase(it->second);
+    lru_index_.erase(it);
+}
+
+void KVStore::evict_if_needed_locked(bool persist) {
+    while (max_keys_ > 0 && store_.size() > max_keys_ && !lru_order_.empty()) {
+        const std::string victim = lru_order_.back();
+        lru_order_.pop_back();
+        lru_index_.erase(victim);
+        if (store_.erase(victim) > 0 && persist) {
+            append_wal_del(victim);
+        }
+    }
 }
