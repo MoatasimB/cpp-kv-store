@@ -4,6 +4,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstdio>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -16,7 +17,9 @@ struct TestPaths {
 };
 
 TestPaths make_paths(const std::string& name) {
-    const auto base = "/private/tmp/cpp_kv_store_" + name + "_" + std::to_string(getpid());
+    const auto base_path = std::filesystem::temp_directory_path() /
+                           ("cpp_kv_store_" + name + "_" + std::to_string(getpid()));
+    const auto base = base_path.string();
     std::remove(base.c_str());
     std::remove((base + ".wal").c_str());
     std::remove((base + ".tmp").c_str());

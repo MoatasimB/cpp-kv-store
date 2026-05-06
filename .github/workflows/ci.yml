@@ -28,6 +28,3 @@ jobs:
 
       - name: Integration test
         run: ./scripts/integration_test.sh
-
-      - name: Docker build
-        run: docker build -t cpp-kv-store .

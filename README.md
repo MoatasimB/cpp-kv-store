@@ -1,6 +1,6 @@
 # Durable C++ Key-Value Store
 
-A small Redis-inspired key-value store written in C++17. It supports TCP clients, TTL expiration, readable write-ahead logging, snapshot recovery, tests, and a simple benchmark client.
+A small Redis-inspired key-value store written in C++17. It supports TCP clients, TTL expiration, LRU eviction, readable write-ahead logging, snapshot recovery, tests, and a simple benchmark client.
 
 ## Features
 
@@ -11,7 +11,7 @@ A small Redis-inspired key-value store written in C++17. It supports TCP clients
 - Optional LRU eviction with a configurable max-key limit
 - Readable text WAL for crash recovery
 - Snapshot compaction to keep recovery fast
-- Unit tests, integration test, GitHub Actions CI, Dockerfile, and concurrent benchmark client
+- Unit tests, integration test, GitHub Actions CI, and concurrent benchmark client
 
 ## Build
 
@@ -93,19 +93,6 @@ Run the socket-level integration test:
 ```
 
 The integration test builds the project, starts the TCP server, sends real commands through `nc`, verifies responses, and shuts the server down.
-
-## Docker
-
-```bash
-docker build -t cpp-kv-store .
-docker run --rm -p 6380:6380 cpp-kv-store
-```
-
-Then connect with:
-
-```bash
-nc 127.0.0.1 6380
-```
 
 ## Benchmark
 
