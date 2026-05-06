@@ -38,7 +38,7 @@ WAL + Snapshot
 WAL and snapshot files use this text format:
 
 ```text
-SET -1 "name" "Moatasim Butt"
+SET -1 "name" "Moat"
 SET 1770000000000 "temporary" "value"
 DEL "old-key"
 ```
@@ -69,7 +69,7 @@ Responses are also newline-terminated text. Missing keys return `(nil)` for `GET
 `SET` stores the rest of the line as the value, so spaces are supported:
 
 ```text
-SET full_name Moatasim Butt
+SET full_name Moat
 GET full_name
 ```
 
@@ -102,7 +102,7 @@ Then from another terminal:
 ```bash
 nc 127.0.0.1 6380
 PING
-SET name Moatasim Butt
+SET name Moat
 GET name
 EXPIRE name 10
 TTL name
@@ -167,12 +167,12 @@ Benchmark numbers vary by machine, compiler, port contention, and whether persis
 If a client writes:
 
 ```text
-SET name Moatasim Butt
+SET name Moat
 SET city NYC
 DEL city
 ```
 
-The WAL records those mutations. On restart, `KVStore` loads the latest snapshot, then replays the WAL in order. The recovered state contains `name = Moatasim Butt`, and `city` remains deleted.
+The WAL records those mutations. On restart, `KVStore` loads the latest snapshot, then replays the WAL in order. The recovered state contains `name = Moat`, and `city` remains deleted.
 
 `COMPACT` writes the current live state into the snapshot file and clears the WAL. Future recovery starts from that compact snapshot plus any newer WAL records.
 

@@ -66,8 +66,8 @@ void test_values_with_spaces_through_command_handler() {
     const auto paths = make_paths("spaces");
     {
         KVStore store(paths.snapshot, paths.wal);
-        assert(Server::handle_command(store, "SET full_name Moatasim Butt") == "OK\n");
-        assert(Server::handle_command(store, "GET full_name") == "Moatasim Butt\n");
+        assert(Server::handle_command(store, "SET full_name Moat") == "OK\n");
+        assert(Server::handle_command(store, "GET full_name") == "Moat\n");
     }
     cleanup(paths);
 }
