@@ -10,8 +10,8 @@ A Redis-inspired C++17 key-value store focused on systems fundamentals: TCP netw
 - Commands: `PING`, `SET`, `GET`, `DEL`, `EXPIRE`, `TTL`, `SAVE`, `COMPACT`, `STATS`, `QUIT`
 - Values with spaces, e.g. `SET lesson "hello world"` stores the rest of the line
 - TTL expiration with lazy deletion and a background cleanup thread
-- Binary write-ahead log with checksums
-- Snapshot files for compact durable recovery
+- Readable text write-ahead log
+- Readable snapshot files for compact durable recovery
 - WAL replay on startup
 - Storage tests and a concurrent benchmark client
 
@@ -33,7 +33,17 @@ KVStore
 WAL + Snapshot
 ```
 
-`KVStore` owns the in-memory map. Mutating operations append to the WAL before updating memory. On restart, the store loads the latest snapshot and replays WAL records to reconstruct state.
+`KVStore` owns the in-memory map. Mutating operations append readable records to the WAL before updating memory. On restart, the store loads the latest snapshot and replays WAL records to reconstruct state.
+
+WAL and snapshot files use this text format:
+
+```text
+SET -1 "name" "Moatasim Butt"
+SET 1770000000000 "temporary" "value"
+DEL "old-key"
+```
+
+The number after `SET` is the expiration timestamp in Unix milliseconds, or `-1` if the key does not expire.
 
 Snapshots are compact full copies of live keys. `COMPACT` writes a new snapshot and truncates the WAL so recovery remains fast.
 

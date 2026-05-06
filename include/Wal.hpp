@@ -6,9 +6,9 @@
 #include <optional>
 #include <string>
 
-enum class WalOp : std::uint8_t {
-    Set = 1,
-    Del = 2,
+enum class WalOp {
+    Set,
+    Del,
 };
 
 struct WalRecord {
